@@ -1,4 +1,5 @@
-export const PUTER_WORKER_URL = import.meta.env.VITE_PUTER_WORKER_URL || "";
+// KV key prefix for saved projects
+export const PROJECT_KEY_PREFIX = "planvia_project_";
 
 // Storage Paths
 export const STORAGE_PATHS = {
