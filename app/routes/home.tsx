@@ -1,157 +1,134 @@
 import type { Route } from "./+types/home";
-import Navbar from "../../components/Navbar";
-import {ArrowRight, ArrowUpRight, Clock, Layers} from "lucide-react";
-import Button from "../../components/ui/Button";
-import Upload from "../../components/Upload";
-import {useNavigate} from "react-router";
-import {useEffect, useRef, useState} from "react";
-import {createProject, getProjects} from "../../lib/puter.action";
+import {useMemo, useState} from "react";
+import {Link, useOutletContext} from "react-router";
+import {Columns2, PanelsTopLeft, Sun} from "lucide-react";
+import CompareStage from "../../components/CompareStage";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "New React Router App" },
-    { name: "description", content: "Welcome to React Router!" },
+    { title: "Planvia — judge a render in the light it deserves" },
+    {
+      name: "description",
+      content:
+        "Planvia turns a floor plan into a photoreal top-down view, then hands you a neutral dark room to inspect it in.",
+    },
   ];
 }
 
+const MODES: CompareMode[] = ["compare", "render", "plan"];
+
+const slugify = (value: string) =>
+    value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+
 export default function Home() {
-    const navigate = useNavigate();
-    const [projects, setProjects] = useState<DesignItem[]>([]);
-    const isCreatingProjectRef = useRef(false);
+    const { projects, isSignedIn } = useOutletContext<AppContext>();
+    const [mode, setMode] = useState<CompareMode>("compare");
+    const [position, setPosition] = useState(50);
 
-    const handleUploadComplete = async (base64Image: string) => {
-        try {
+    // Show the newest finished render in the hero; fall back to bare surfaces.
+    const featured = useMemo(
+        () => projects.find((project) => project.renderedImage && project.sourceImage),
+        [projects],
+    );
 
-            if(isCreatingProjectRef.current) return false;
-            isCreatingProjectRef.current = true;
-            const newId = Date.now().toString();
-            const name = `Residence ${newId}`;
+    const path = featured
+        ? `${slugify(featured.name ?? `residence-${featured.id}`)} / top-down`
+        : "no renders yet";
 
-            const newItem = {
-                id: newId, name, sourceImage: base64Image,
-                renderedImage: undefined,
-                timestamp: Date.now()
-            }
+    return (
+        <div className="overview">
+            <section className="hero">
+                <div className="announce">
+                    <span className="dot" />
+                    {isSignedIn && projects.length > 0
+                        ? `${projects.length} ${projects.length === 1 ? "render" : "renders"} in this workspace`
+                        : "Top-down photoreal renders from a floor plan"}
+                </div>
 
-            const saved = await createProject({ item: newItem, visibility: 'private' });
+                <h1>Judge a render in the light it deserves.</h1>
 
-            if(!saved) {
-                console.error("Failed to create project");
-                return false;
-            }
+                <p className="subtitle">
+                    Planvia turns a floor plan into a photoreal top-down view, then hands you a neutral
+                    dark room to inspect it in. No colour cast, no chrome competing with the image.
+                </p>
 
-            setProjects((prev) => [saved, ...prev]);
+                <div className="actions">
+                    <Link to="/new" className="btn btn--primary btn--lg">Render a plan</Link>
+                    <Link to="/renders" className="btn btn--secondary btn--lg">Browse renders</Link>
+                </div>
 
-            navigate(`/visualizer/${newId}`, {
-                state: {
-                    initialImage: saved.sourceImage,
-                    initialRendered: saved.renderedImage || null,
-                    name
-                }
-            });
+                <div className="showcase">
+                    <div className="showcase-head">
+                        <div className="dots">
+                            <span />
+                            <span />
+                            <span />
+                        </div>
+                        <span className="path">{path}</span>
+                    </div>
 
-            return true;
-        } finally {
-            isCreatingProjectRef.current = false;
-        }
-    }
+                    <CompareStage
+                        planImage={featured?.sourceImage}
+                        renderImage={featured?.renderedImage}
+                        mode={mode}
+                        position={position}
+                        onPositionChange={setPosition}
+                    >
+                        <div className="glass-bar absolute bottom-4 left-1/2 -translate-x-1/2">
+                            {MODES.map((value) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    className={`seg ${mode === value ? "is-active" : ""}`}
+                                    onClick={() => setMode(value)}
+                                >
+                                    {value[0].toUpperCase() + value.slice(1)}
+                                </button>
+                            ))}
+                        </div>
+                    </CompareStage>
+                </div>
+            </section>
 
-    useEffect(() => {
-        const fetchProjects = async () => {
-            const items = await getProjects();
+            <section className="features">
+                <div className="grid">
+                    <article className="feature">
+                        <Sun className="icon" strokeWidth={1.8} />
+                        <h3>Neutral surround</h3>
+                        <p>
+                            Greys picked so nothing bleeds into the image. What you see is the render, not
+                            the interface around it.
+                        </p>
+                    </article>
 
-            setProjects(items)
-        }
+                    <article className="feature">
+                        <PanelsTopLeft className="icon" strokeWidth={1.8} />
+                        <h3>Toolbars that float</h3>
+                        <p>Controls sit over the image on glass and step out of the way while you look.</p>
+                    </article>
 
-        fetchProjects();
-    }, []);
+                    <article className="feature">
+                        <Columns2 className="icon" strokeWidth={1.8} />
+                        <h3>Real before / after</h3>
+                        <p>
+                            A proper handle, keyboard nudge, and every version kept so you can step back
+                            through them.
+                        </p>
+                    </article>
+                </div>
+            </section>
 
-  return (
-      <div className="home">
-          <Navbar />
-
-          <section className="hero">
-              <div className="announce">
-                  <div className="dot">
-                      <div className="pulse"></div>
-                  </div>
-
-                  <p>Introducing Planvia 2.0</p>
-              </div>
-
-              <h1>Build beautiful spaces at the speed of thought with Planvia</h1>
-
-              <p className="subtitle">
-                  Planvia is an AI-first design environment that helps you visualize, render, and ship architectural projects faster  than ever.
-              </p>
-
-              <div className="actions">
-                  <a href="#upload" className="cta">
-                      Start Building <ArrowRight className="icon" />
-                  </a>
-
-                  <Button variant="outline" size="lg" className="demo">
-                      Watch Demo
-                  </Button>
-              </div>
-
-              <div id="upload" className="upload-shell">
-                <div className="grid-overlay" />
-
-                  <div className="upload-card">
-                      <div className="upload-head">
-                          <div className="upload-icon">
-                              <Layers className="icon" />
-                          </div>
-
-                          <h3>Upload your floor plan</h3>
-                          <p>Supports JPG, PNG, formats up to 10MB</p>
-                      </div>
-
-                      <Upload onComplete={handleUploadComplete} />
-                  </div>
-              </div>
-          </section>
-
-          <section className="projects">
-              <div className="section-inner">
-                  <div className="section-head">
-                      <div className="copy">
-                          <h2>Projects</h2>
-                          <p>Your latest work and shared community projects, all in one place.</p>
-                      </div>
-                  </div>
-
-                  <div className="projects-grid">
-                      {projects.map(({id, name, renderedImage, sourceImage, timestamp}) => (
-                          <div key={id} className="project-card group" onClick={() => navigate(`/visualizer/${id}`)}>
-                              <div className="preview">
-                                  <img  src={renderedImage || sourceImage} alt="Project"
-                                  />
-
-                                  <div className="badge">
-                                      <span>Community</span>
-                                  </div>
-                              </div>
-
-                              <div className="card-body">
-                                  <div>
-                                      <h3>{name}</h3>
-
-                                      <div className="meta">
-                                          <Clock size={12} />
-                                          <span>{new Date(timestamp).toLocaleDateString()}</span>
-                                      </div>
-                                  </div>
-                                  <div className="arrow">
-                                      <ArrowUpRight size={18} />
-                                  </div>
-                              </div>
-                          </div>
-                      ))}
-                  </div>
-              </div>
-          </section>
-      </div>
-  )
+            <footer className="site-footer">
+                <span>Planvia &mdash; architectural visualization</span>
+                <div className="links">
+                    <a href="#0">Pricing</a>
+                    <a href="#0">Docs</a>
+                    <a href="#0">Contact</a>
+                </div>
+            </footer>
+        </div>
+    )
 }

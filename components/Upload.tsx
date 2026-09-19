@@ -1,11 +1,9 @@
-import React, {useCallback, useEffect, useRef, useState} from 'react'
+import {type ChangeEvent, type DragEvent, useCallback, useEffect, useRef, useState} from 'react'
 import {useOutletContext} from "react-router";
-import {CheckCircle2, ImageIcon, UploadIcon} from "lucide-react";
+import {RefreshCcw, Upload as UploadIcon} from "lucide-react";
 import {PROGRESS_INCREMENT, REDIRECT_DELAY_MS, PROGRESS_INTERVAL_MS} from "../lib/constants";
 
-interface UploadProps {
-    onComplete?: (base64Data: string) => void;
-}
+const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 const Upload = ({ onComplete }: UploadProps) => {
     const [file, setFile] = useState<File | null>(null);
@@ -14,7 +12,7 @@ const Upload = ({ onComplete }: UploadProps) => {
     const intervalRef = useRef<NodeJS.Timeout | null>(null);
     const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    const { isSignedIn } = useOutletContext<AuthContext>();
+    const { isSignedIn } = useOutletContext<AppContext>();
 
     useEffect(() => {
         return () => {
@@ -29,10 +27,10 @@ const Upload = ({ onComplete }: UploadProps) => {
         };
     }, []);
 
-    const processFile = useCallback((file: File) => {
-        if (!isSignedIn) return;
+    const processFile = useCallback((selected: File) => {
+        if (!isSignedIn || file) return;
 
-        setFile(file);
+        setFile(selected);
         setProgress(0);
 
         const reader = new FileReader();
@@ -61,10 +59,10 @@ const Upload = ({ onComplete }: UploadProps) => {
                 });
             }, PROGRESS_INTERVAL_MS);
         };
-        reader.readAsDataURL(file);
-    }, [isSignedIn, onComplete]);
+        reader.readAsDataURL(selected);
+    }, [file, isSignedIn, onComplete]);
 
-    const handleDragOver = (e: React.DragEvent) => {
+    const handleDragOver = (e: DragEvent) => {
         e.preventDefault();
         if (!isSignedIn) return;
         setIsDragging(true);
@@ -74,20 +72,19 @@ const Upload = ({ onComplete }: UploadProps) => {
         setIsDragging(false);
     };
 
-    const handleDrop = (e: React.DragEvent) => {
+    const handleDrop = (e: DragEvent) => {
         e.preventDefault();
         setIsDragging(false);
 
         if (!isSignedIn) return;
 
         const droppedFile = e.dataTransfer.files[0];
-        const allowedTypes = ['image/jpeg', 'image/png'];
-        if (droppedFile && allowedTypes.includes(droppedFile.type)) {
+        if (droppedFile && ACCEPTED_TYPES.includes(droppedFile.type)) {
             processFile(droppedFile);
         }
     };
 
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
         if (!isSignedIn) return;
 
         const selectedFile = e.target.files?.[0];
@@ -96,55 +93,51 @@ const Upload = ({ onComplete }: UploadProps) => {
         }
     };
 
+    const dropzoneClasses = [
+        'dropzone',
+        isDragging ? 'is-dragging' : '',
+        isSignedIn ? '' : 'is-disabled',
+    ].filter(Boolean).join(' ');
+
     return (
         <div className="upload">
-            {!file ? (
-                <div
-                    className={`dropzone ${isDragging ? 'is-dragging' : ''}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                >
-                    <input
-                        type="file"
-                        className="drop-input"
-                        accept=".jpg,.jpeg,.png,.webp"
-                        disabled={!isSignedIn}
-                        onChange={handleChange}
-                    />
+            <div
+                className={dropzoneClasses}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+            >
+                <input
+                    type="file"
+                    className="drop-input"
+                    accept=".jpg,.jpeg,.png,.webp"
+                    disabled={!isSignedIn || !!file}
+                    onChange={handleChange}
+                    aria-label="Upload a floor plan"
+                />
 
-                    <div className="drop-content">
-                        <div className="drop-icon">
-                            <UploadIcon size={20} />
-                        </div>
-                        <p>
-                            {isSignedIn ? (
-                                "Click to upload or just drag and drop"
-                            ): ("Sign in or sign up with Puter to upload")}
-                        </p>
-                        <p className="help">Maximum file size 50 MB.</p>
+                <UploadIcon size={24} strokeWidth={1.6} className="drop-icon" />
+
+                <span className="title">
+                    {isSignedIn ? 'Drop a plan here' : 'Sign in with Puter to upload'}
+                </span>
+                <span className="help">
+                    {isSignedIn ? 'or click to browse' : 'Your renders are stored on your own Puter account'}
+                </span>
+            </div>
+
+            {file && (
+                <div className="progress-card">
+                    <div className="head">
+                        <RefreshCcw className="spinner" />
+                        <span className="title">
+                            {progress < 100 ? `Analysing ${file.name}` : 'Opening the render room'}
+                        </span>
+                        <span className="pct">{progress}%</span>
                     </div>
-                </div>
-            ) : (
-                <div className="upload-status">
-                    <div className="status-content">
-                        <div className="status-icon">
-                            {progress === 100 ? (
-                                <CheckCircle2 className="check" />
-                            ): (
-                                <ImageIcon className="image" />
-                            )}
-                        </div>
 
-                        <h3>{file.name}</h3>
-
-                        <div className='progress'>
-                            <div className="bar" style={{ width: `${progress}%` }} />
-
-                            <p className="status-text">
-                                {progress < 100 ? 'Analyzing Floor Plan...' : 'Redirecting...'}
-                            </p>
-                        </div>
+                    <div className="track">
+                        <div className="bar" style={{ width: `${progress}%` }} />
                     </div>
                 </div>
             )}

@@ -18,7 +18,13 @@ export const fetchAsDataUrl = async (url: string): Promise<string> => {
   });
 };
 
-export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
+const FURNISH_OFF_DIRECTIVE = `
+
+OVERRIDE — FURNISHING DISABLED:
+- Leave every room empty. Render only the shell: floors, walls, doors, and windows.
+- Ignore the furniture and fixture mapping above; do not add beds, sofas, tables, counters, or sanitary ware.`;
+
+export const generate3DView = async ({ sourceImage, furnish = true }: Generate3DViewParams) => {
     const dataUrl = sourceImage.startsWith('data:')
         ? sourceImage
         : await fetchAsDataUrl(sourceImage);
@@ -28,7 +34,11 @@ export const generate3DView = async ({ sourceImage }: Generate3DViewParams) => {
 
     if(!mimeType || !base64Data) throw new Error('Invalid source image payload');
 
-    const response = await puter.ai.txt2img(PLANVIA_RENDER_PROMPT, {
+    const prompt = furnish
+        ? PLANVIA_RENDER_PROMPT
+        : `${PLANVIA_RENDER_PROMPT}${FURNISH_OFF_DIRECTIVE}`;
+
+    const response = await puter.ai.txt2img(prompt, {
         provider: "gemini",
         model: "gemini-2.5-flash-image-preview",
         input_image: base64Data,

@@ -9,12 +9,14 @@ import {
 
 import type { Route } from "./+types/root";
 import "./app.css";
-import {useEffect, useState} from "react";
+import {useCallback, useEffect, useState} from "react";
 import {
     getCurrentUser,
+    getProjects,
     signIn as puterSignIn,
     signOut as puterSignOut,
 } from "../lib/puter.action";
+import TopBar from "../components/TopBar";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -25,7 +27,7 @@ export const links: Route.LinksFunction = () => [
   },
   {
     rel: "stylesheet",
-    href: "https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap",
+    href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap",
   },
 ];
 
@@ -35,6 +37,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="theme-color" content="#0B0B0C" />
         <Meta />
         <Links />
       </head>
@@ -55,8 +58,33 @@ const DEFAULT_AUTH_STATE: AuthState = {
 
 export default function App() {
     const [authState, setAuthState] = useState<AuthState>(DEFAULT_AUTH_STATE);
+    const [projects, setProjects] = useState<DesignItem[]>([]);
+    const [isProjectsLoading, setIsProjectsLoading] = useState(true);
 
-    const refreshAuth = async () => {
+    const refreshProjects = useCallback(async () => {
+        setIsProjectsLoading(true);
+
+        try {
+            const items = await getProjects();
+            const sorted = [...items].sort((a, b) => b.timestamp - a.timestamp);
+
+            setProjects(sorted);
+
+            return sorted;
+        } finally {
+            setIsProjectsLoading(false);
+        }
+    }, []);
+
+    const upsertProject = useCallback((item: DesignItem) => {
+        setProjects((prev) => {
+            const next = prev.filter(({ id }) => id !== item.id);
+
+            return [item, ...next].sort((a, b) => b.timestamp - a.timestamp);
+        });
+    }, []);
+
+    const refreshAuth = useCallback(async () => {
         try {
             const user = await getCurrentUser();
 
@@ -66,16 +94,25 @@ export default function App() {
                 userId: user?.uuid || null,
             });
 
+            if (user) {
+                await refreshProjects();
+            } else {
+                setProjects([]);
+                setIsProjectsLoading(false);
+            }
+
             return !!user;
         } catch {
             setAuthState(DEFAULT_AUTH_STATE);
+            setProjects([]);
+            setIsProjectsLoading(false);
             return false;
         }
-    }
+    }, [refreshProjects]);
 
     useEffect(() => {
         refreshAuth()
-    }, []);
+    }, [refreshAuth]);
 
     const signIn = async () => {
         await puterSignIn();
@@ -87,12 +124,22 @@ export default function App() {
         return await refreshAuth();
     }
 
+    const context: AppContext = {
+        ...authState,
+        refreshAuth,
+        signIn,
+        signOut,
+        projects,
+        isProjectsLoading,
+        refreshProjects,
+        upsertProject,
+    };
+
   return (
-      <main className="min-h-screen bg-background text-foreground relative z-10">
-        <Outlet
-            context={{ ...authState, refreshAuth, signIn, signOut }}
-        />;
-      </main>
+      <div className="flex min-h-screen flex-col bg-background text-foreground">
+        <TopBar {...context} />
+        <Outlet context={context} />
+      </div>
   )
 }
 
@@ -113,11 +160,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
-      <h1>{message}</h1>
+    <main className="notice">
+      <h1 className="font-mono text-[10px] tracking-[0.18em] text-dim">{message}</h1>
       <p>{details}</p>
       {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
+        <pre className="mt-4 w-full overflow-x-auto rounded-xl border border-line bg-surface p-4 text-left font-mono text-[11px] text-muted">
           <code>{stack}</code>
         </pre>
       )}

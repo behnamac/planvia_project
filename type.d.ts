@@ -25,6 +25,8 @@ interface DesignItem {
     sharedBy?: string | null;
     sharedAt?: string | null;
     isPublic?: boolean;
+    /** Whether the render should furnish rooms from the plan's fixture icons. */
+    furnish?: boolean;
 }
 
 interface DesignConfig {
@@ -124,4 +126,30 @@ interface CreateProjectParams {
 interface Generate3DViewParams {
     sourceImage: string;
     projectId?: string | null;
+    furnish?: boolean;
 }
+
+/** One render of a project. A re-render appends a new version. */
+interface RenderVersion {
+    id: string;
+    image: string;
+    createdAt: number;
+    durationMs?: number;
+}
+
+/** Non-destructive viewing adjustments applied to the render on screen. */
+interface RenderAdjustments {
+    /** Stops of exposure, -1 to +1. */
+    exposure: number;
+    /** Colour temperature in Kelvin, 3000 to 7000. */
+    warmth: number;
+}
+
+type CompareMode = "compare" | "render" | "plan";
+
+type AppContext = AuthContext & {
+    projects: DesignItem[];
+    isProjectsLoading: boolean;
+    refreshProjects: () => Promise<DesignItem[]>;
+    upsertProject: (item: DesignItem) => void;
+};

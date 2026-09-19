@@ -11,6 +11,8 @@
     },
     "routeIdToServerBundleId": {
       "routes/home": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/renders": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
+      "routes/new": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0",
       "routes/visualizer.$id": "nodejs_eyJydW50aW1lIjoibm9kZWpzIn0"
     },
     "routes": {
@@ -25,6 +27,24 @@
         "parentId": "root",
         "file": "app/routes/home.tsx",
         "index": true,
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/renders": {
+        "id": "routes/renders",
+        "parentId": "root",
+        "file": "app/routes/renders.tsx",
+        "path": "renders",
+        "config": {
+          "runtime": "nodejs"
+        }
+      },
+      "routes/new": {
+        "id": "routes/new",
+        "parentId": "root",
+        "file": "app/routes/new.tsx",
+        "path": "new",
         "config": {
           "runtime": "nodejs"
         }
@@ -64,6 +84,18 @@
         "file": "routes/home.tsx",
         "index": true
       },
+      "routes/renders": {
+        "id": "routes/renders",
+        "parentId": "root",
+        "file": "./routes/renders.tsx",
+        "path": "renders"
+      },
+      "routes/new": {
+        "id": "routes/new",
+        "parentId": "root",
+        "file": "./routes/new.tsx",
+        "path": "new"
+      },
       "routes/visualizer.$id": {
         "id": "routes/visualizer.$id",
         "parentId": "root",
@@ -88,6 +120,14 @@
           {
             "file": "routes/home.tsx",
             "index": true
+          },
+          {
+            "file": "./routes/renders.tsx",
+            "path": "renders"
+          },
+          {
+            "file": "./routes/new.tsx",
+            "path": "new"
           },
           {
             "file": "./routes/visualizer.$id.tsx",

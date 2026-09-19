@@ -1,68 +1,111 @@
-import { useNavigate, useOutletContext, useParams} from "react-router";
-import {useEffect, useRef, useState} from "react";
-import {generate3DView} from "../../lib/ai.action";
-import {Box, Download, RefreshCcw, Share2, X} from "lucide-react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useNavigate, useOutletContext, useParams} from "react-router";
+import {ArrowLeft, Minus, Plus, RefreshCcw} from "lucide-react";
 import Button from "../../components/ui/Button";
+import CompareStage from "../../components/CompareStage";
+import {generate3DView} from "../../lib/ai.action";
 import {createProject, getProjectById} from "../../lib/puter.action";
-import {ReactCompareSlider, ReactCompareSliderImage} from "react-compare-slider";
+import {IMAGE_RENDER_DIMENSION, SHARE_STATUS_RESET_DELAY_MS} from "../../lib/constants";
+import {
+    fetchBlobFromUrl,
+    getAdjustmentFilter,
+    isHostedUrl,
+    isNeutralAdjustment,
+    renderAdjustedPngBlob,
+} from "../../lib/utils";
+
+const MODES: CompareMode[] = ["compare", "render", "plan"];
+const ZOOM_STEP = 10;
+const ZOOM_MIN = 10;
+const ZOOM_MAX = 400;
+const NEUTRAL_ADJUSTMENTS: RenderAdjustments = { exposure: 0, warmth: 5200 };
+
+const formatExposure = (value: number) => `${value > 0 ? "+" : ""}${value.toFixed(1)}`;
 
 const VisualizerId = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { userId } = useOutletContext<AuthContext>()
+    const { userId, userName, isSignedIn, upsertProject } = useOutletContext<AppContext>();
 
     const hasInitialGenerated = useRef(false);
+    const versionCountRef = useRef(0);
 
     const [project, setProject] = useState<DesignItem | null>(null);
     const [isProjectLoading, setIsProjectLoading] = useState(true);
-
     const [isProcessing, setIsProcessing] = useState(false);
-    const [currentImage, setCurrentImage] = useState<string | null>(null);
 
-    const handleBack = () => navigate('/');
-    const handleExport = () => {
-        if (!currentImage) return;
+    const [versions, setVersions] = useState<RenderVersion[]>([]);
+    const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
 
-        const link = document.createElement('a');
-        link.href = currentImage;
-        link.download = `planvia-${id || 'design'}.png`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+    const [mode, setMode] = useState<CompareMode>("compare");
+    const [position, setPosition] = useState(50);
+    const [zoom, setZoom] = useState(100);
+    const [adjustments, setAdjustments] = useState<RenderAdjustments>(NEUTRAL_ADJUSTMENTS);
+    const [furnish, setFurnish] = useState(true);
+    const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
+    const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(null);
 
-    const runGeneration = async (item: DesignItem) => {
-        if(!id || !item.sourceImage) return;
+    const activeVersion = versions.find((version) => version.id === activeVersionId) ?? null;
+    const currentImage = activeVersion?.image ?? null;
+    const renderFilter = getAdjustmentFilter(adjustments);
 
-        try {
-            setIsProcessing(true);
-            const result = await generate3DView({ sourceImage: item.sourceImage });
+    const handleBack = () => navigate("/renders");
 
-            if(result.renderedImage) {
-                setCurrentImage(result.renderedImage);
+    const runGeneration = useCallback(
+        async (item: DesignItem, withFurnish: boolean) => {
+            if (!item.sourceImage) return;
 
-                const updatedItem = {
-                    ...item,
-                    renderedImage: result.renderedImage,
-                    renderedPath: result.renderedPath,
-                    timestamp: Date.now(),
-                    ownerId: item.ownerId ?? userId ?? null,
-                    isPublic: item.isPublic ?? false,
-                }
+            const startedAt = Date.now();
 
-                const saved = await createProject({ item: updatedItem, visibility: "private" })
+            try {
+                setIsProcessing(true);
 
-                if(saved) {
+                const result = await generate3DView({
+                    sourceImage: item.sourceImage,
+                    furnish: withFurnish,
+                });
+
+                if (!result.renderedImage) return;
+
+                const saved = await createProject({
+                    item: {
+                        ...item,
+                        renderedImage: result.renderedImage,
+                        renderedPath: result.renderedPath,
+                        timestamp: Date.now(),
+                        furnish: withFurnish,
+                        ownerId: item.ownerId ?? userId ?? null,
+                        isPublic: item.isPublic ?? false,
+                    },
+                    visibility: "private",
+                });
+
+                const image = saved?.renderedImage || result.renderedImage;
+
+                if (saved) {
                     setProject(saved);
-                    setCurrentImage(saved.renderedImage || result.renderedImage);
+                    upsertProject(saved);
                 }
+
+                versionCountRef.current += 1;
+
+                const next: RenderVersion = {
+                    id: `v${versionCountRef.current}`,
+                    image,
+                    createdAt: Date.now(),
+                    durationMs: Date.now() - startedAt,
+                };
+
+                setVersions((prev) => [...prev, next]);
+                setActiveVersionId(next.id);
+            } catch (error) {
+                console.error("Generation failed: ", error);
+            } finally {
+                setIsProcessing(false);
             }
-        } catch (error) {
-            console.error('Generation failed: ', error)
-        } finally {
-            setIsProcessing(false);
-        }
-    }
+        },
+        [upsertProject, userId],
+    );
 
     useEffect(() => {
         let isMounted = true;
@@ -80,7 +123,21 @@ const VisualizerId = () => {
             if (!isMounted) return;
 
             setProject(fetchedProject);
-            setCurrentImage(fetchedProject?.renderedImage || null);
+            setFurnish(fetchedProject?.furnish ?? true);
+
+            const initialVersions: RenderVersion[] = fetchedProject?.renderedImage
+                ? [
+                      {
+                          id: "v1",
+                          image: fetchedProject.renderedImage,
+                          createdAt: fetchedProject.timestamp,
+                      },
+                  ]
+                : [];
+
+            versionCountRef.current = initialVersions.length;
+            setVersions(initialVersions);
+            setActiveVersionId(initialVersions[0]?.id ?? null);
             setIsProjectLoading(false);
             hasInitialGenerated.current = false;
         };
@@ -93,117 +150,320 @@ const VisualizerId = () => {
     }, [id]);
 
     useEffect(() => {
-        if (
-            isProjectLoading ||
-            hasInitialGenerated.current ||
-            !project?.sourceImage
-        )
-            return;
+        if (isProjectLoading || hasInitialGenerated.current || !project?.sourceImage) return;
 
-        if (project.renderedImage) {
-            setCurrentImage(project.renderedImage);
-            hasInitialGenerated.current = true;
+        hasInitialGenerated.current = true;
+
+        if (project.renderedImage) return;
+
+        void runGeneration(project, project.furnish ?? true);
+    }, [isProjectLoading, project, runGeneration]);
+
+    // Report the render's true pixel size in the info rail.
+    useEffect(() => {
+        if (!currentImage) {
+            setNaturalSize(null);
             return;
         }
 
-        hasInitialGenerated.current = true;
-        void runGeneration(project);
-    }, [project, isProjectLoading]);
+        let isMounted = true;
+        const image = new Image();
+
+        image.onload = () => {
+            if (isMounted) {
+                setNaturalSize({ width: image.naturalWidth, height: image.naturalHeight });
+            }
+        };
+        image.src = currentImage;
+
+        return () => {
+            isMounted = false;
+        };
+    }, [currentImage]);
+
+    const downloadBlob = (blob: Blob) => {
+        const href = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+
+        link.href = href;
+        link.download = `planvia-${id || "design"}-${activeVersion?.id ?? "v1"}.png`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(href);
+    };
+
+    const handleExport = async () => {
+        if (!currentImage) return;
+
+        const blob = isNeutralAdjustment(adjustments)
+            ? (await fetchBlobFromUrl(currentImage))?.blob
+            : await renderAdjustedPngBlob(currentImage, adjustments);
+
+        if (blob) {
+            downloadBlob(blob);
+            return;
+        }
+
+        // Last resort: let the browser handle the URL directly.
+        window.open(currentImage, "_blank", "noopener");
+    };
+
+    const handleShare = async () => {
+        const link = currentImage && isHostedUrl(currentImage) ? currentImage : window.location.href;
+
+        try {
+            setShareStatus("saving");
+            await navigator.clipboard.writeText(link);
+            setShareStatus("done");
+            setTimeout(() => setShareStatus("idle"), SHARE_STATUS_RESET_DELAY_MS);
+        } catch (e) {
+            console.error(`Could not copy share link: ${e}`);
+            setShareStatus("idle");
+        }
+    };
+
+    const info = useMemo(
+        () => [
+            {
+                key: "size",
+                value: naturalSize
+                    ? `${naturalSize.width} × ${naturalSize.height}`
+                    : `${IMAGE_RENDER_DIMENSION} × ${IMAGE_RENDER_DIMENSION}`,
+            },
+            {
+                key: "time",
+                value: activeVersion?.durationMs
+                    ? `${(activeVersion.durationMs / 1000).toFixed(1)}s`
+                    : "—",
+            },
+            { key: "owner", value: userName ?? "—" },
+        ],
+        [activeVersion, naturalSize, userName],
+    );
+
+    if (isProjectLoading) {
+        return (
+            <div className="notice">
+                <p>Loading project&hellip;</p>
+            </div>
+        );
+    }
+
+    if (!project) {
+        return (
+            <div className="notice">
+                <h2>Project not found</h2>
+                <p>
+                    {isSignedIn
+                        ? "This render is not in your workspace."
+                        : "Sign in with Puter to open your renders."}
+                </p>
+                <Button variant="secondary" onClick={handleBack}>
+                    Browse renders
+                </Button>
+            </div>
+        );
+    }
 
     return (
-        <div className="visualizer">
-            <nav className="topbar">
-                <div className="brand">
-                    <Box className="logo" />
+        <div className="room">
+            <div className="room-bar">
+                <button type="button" className="back" onClick={handleBack} aria-label="Back to renders">
+                    <ArrowLeft size={16} />
+                </button>
 
-                    <span className="name">Planvia</span>
+                <span className="title">{project.name ?? `Residence ${id}`}</span>
+                <span className="chip chip--mono">{activeVersion?.id ?? "no render"}</span>
+
+                <div className="actions">
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => runGeneration(project, furnish)}
+                        disabled={isProcessing || !project.sourceImage}
+                    >
+                        Re-render
+                    </Button>
+                    <Button size="sm" variant="secondary" onClick={handleExport} disabled={!currentImage}>
+                        Export
+                    </Button>
+                    <Button size="sm" onClick={handleShare} disabled={!currentImage}>
+                        {shareStatus === "done" ? "Copied" : "Share"}
+                    </Button>
                 </div>
-                <Button variant="ghost" size="sm" onClick={handleBack} className="exit">
-                    <X className="icon" /> Exit Editor
-                </Button>
-            </nav>
+            </div>
 
-            <section className="content">
-                <div className="panel">
-                    <div className="panel-header">
-                        <div className="panel-meta">
-                            <p>Project</p>
-                            <h2>{project?.name || `Residence ${id}`}</h2>
-                            <p className="note">Created by You</p>
+            <div className="room-body">
+                <div className="stage-wrap">
+                    <CompareStage
+                        className="h-full"
+                        planImage={project.sourceImage}
+                        renderImage={currentImage}
+                        mode={mode}
+                        position={position}
+                        onPositionChange={setPosition}
+                        zoom={zoom}
+                        renderFilter={renderFilter}
+                        beforeLabel="BEFORE — SOURCE PLAN"
+                        afterLabel={`AFTER — ${activeVersion?.id ?? "PENDING"}`}
+                        labelOffset="64px"
+                    >
+                        <div className="glass-bar absolute top-4 left-4">
+                            {MODES.map((value) => (
+                                <button
+                                    key={value}
+                                    type="button"
+                                    className={`seg ${mode === value ? "is-active" : ""}`}
+                                    onClick={() => setMode(value)}
+                                >
+                                    {value[0].toUpperCase() + value.slice(1)}
+                                </button>
+                            ))}
                         </div>
 
-                        <div className="panel-actions">
-                            <Button
-                                size="sm"
-                                onClick={handleExport}
-                                className="export"
-                                disabled={!currentImage}
+                        <div className="glass-bar zoom-bar absolute bottom-4.5 left-1/2 -translate-x-1/2">
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => setZoom((value) => Math.max(ZOOM_MIN, value - ZOOM_STEP))}
+                                aria-label="Zoom out"
                             >
-                                <Download className="w-4 h-4 mr-2" /> Export
-                            </Button>
-                            <Button size="sm" onClick={() => {}} className="share">
-                                <Share2 className="w-4 h-4 mr-2" />
-                                Share
-                            </Button>
+                                <Minus size={14} />
+                            </button>
+                            <span className="value">{zoom}%</span>
+                            <button
+                                type="button"
+                                className="icon-btn"
+                                onClick={() => setZoom((value) => Math.min(ZOOM_MAX, value + ZOOM_STEP))}
+                                aria-label="Zoom in"
+                            >
+                                <Plus size={14} />
+                            </button>
+                            <span className="divider" />
+                            <button type="button" className="seg" onClick={() => setZoom(100)}>
+                                Fit
+                            </button>
                         </div>
-                    </div>
+                    </CompareStage>
 
-                    <div className={`render-area ${isProcessing ? 'is-processing': ''}`}>
-                        {currentImage ? (
-                            <img src={currentImage} alt="AI Render" className="render-img" />
-                        ) : (
-                            <div className="render-placeholder">
-                                {project?.sourceImage && (
-                                    <img src={project?.sourceImage} alt="Original" className="render-fallback" />
-                                )}
+                    {isProcessing && (
+                        <div className="processing">
+                            <div className="card">
+                                <RefreshCcw className="spinner" />
+                                <span className="title">Rendering</span>
+                                <span className="subtitle">Generating your top-down visualization</span>
                             </div>
-                        )}
+                        </div>
+                    )}
+                </div>
 
-                        {isProcessing && (
-                            <div className="render-overlay">
-                                <div className="rendering-card">
-                                    <RefreshCcw className="spinner" />
-                                    <span className="title">Rendering...</span>
-                                    <span className="subtitle">Generating your 3D visualization</span>
+                <aside className="rail">
+                    {versions.length > 0 && (
+                        <section>
+                            <span className="rail-label">VERSIONS</span>
+                            <div className="versions">
+                                {[...versions].reverse().map((version) => (
+                                    <button
+                                        key={version.id}
+                                        type="button"
+                                        className={version.id === activeVersionId ? "is-active" : ""}
+                                        style={{
+                                            backgroundImage: `url(${version.image})`,
+                                            backgroundSize: "cover",
+                                            backgroundPosition: "center",
+                                        }}
+                                        onClick={() => setActiveVersionId(version.id)}
+                                    >
+                                        {version.id}
+                                    </button>
+                                ))}
+                            </div>
+                        </section>
+                    )}
+
+                    <section>
+                        <span className="rail-label">RENDER</span>
+
+                        <div className="controls">
+                            <div className="control">
+                                <span className="label">View</span>
+                                <span className="chip">Top-down</span>
+                            </div>
+
+                            <div className="slider">
+                                <div className="slider-head">
+                                    <label className="label" htmlFor="exposure">Exposure</label>
+                                    <span className="value">{formatExposure(adjustments.exposure)}</span>
                                 </div>
+                                <input
+                                    id="exposure"
+                                    type="range"
+                                    min={-1}
+                                    max={1}
+                                    step={0.1}
+                                    value={adjustments.exposure}
+                                    onChange={(event) =>
+                                        setAdjustments((prev) => ({
+                                            ...prev,
+                                            exposure: Number(event.target.value),
+                                        }))
+                                    }
+                                />
                             </div>
-                        )}
-                    </div>
 
-                </div>
+                            <div className="slider">
+                                <div className="slider-head">
+                                    <label className="label" htmlFor="warmth">Warmth</label>
+                                    <span className="value">{adjustments.warmth}K</span>
+                                </div>
+                                <input
+                                    id="warmth"
+                                    type="range"
+                                    min={3000}
+                                    max={7000}
+                                    step={100}
+                                    value={adjustments.warmth}
+                                    onChange={(event) =>
+                                        setAdjustments((prev) => ({
+                                            ...prev,
+                                            warmth: Number(event.target.value),
+                                        }))
+                                    }
+                                />
+                            </div>
 
-                <div className="panel compare">
-                    <div className="panel-header">
-                        <div className="panel-meta">
-                            <p>Comparison</p>
-                            <h3>Before and After</h3>
+                            <div className="control">
+                                <span className="label">Furnish</span>
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={furnish}
+                                    aria-label="Furnish rooms on the next render"
+                                    className={`toggle ${furnish ? "is-on" : ""}`}
+                                    onClick={() => setFurnish((on) => !on)}
+                                >
+                                    <span className="knob" />
+                                </button>
+                            </div>
                         </div>
-                        <div className="hint">Drag to compare</div>
-                    </div>
+                    </section>
 
-                    <div className="compare-stage">
-                        {project?.sourceImage && currentImage ? (
-                            <ReactCompareSlider
-                                defaultValue={50}
-                                style={{ width: '100%', height: 'auto' }}
-                                itemOne={
-                                    <ReactCompareSliderImage src={project?.sourceImage} alt="before" className="compare-img" />
-                                }
-                                itemTwo={
-                                    <ReactCompareSliderImage src={currentImage || project?.renderedImage} alt="after" className="compare-img" />
-                                }
-                            />
-                        ) : (
-                            <div className="compare-fallback">
-                                {project?.sourceImage && (
-                                    <img src={project.sourceImage} alt="Before" className="compare-img" />
-                                )}
-                            </div>
-                        )}
-                    </div>
-                </div>
-            </section>
+                    <section>
+                        <span className="rail-label">INFO</span>
+                        <div className="info">
+                            {info.map(({ key, value }) => (
+                                <div key={key}>
+                                    <span className="key">{key}</span>
+                                    <span className="val">{value}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </section>
+                </aside>
+            </div>
         </div>
     )
 }
+
 export default VisualizerId
