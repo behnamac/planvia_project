@@ -3,6 +3,8 @@ import {useMemo, useState} from "react";
 import {Link, useOutletContext} from "react-router";
 import {Columns2, PanelsTopLeft, Sun} from "lucide-react";
 import CompareStage from "../../components/CompareStage";
+import SamplePlan from "../../components/SamplePlan";
+import {formatRelativeTime} from "../../lib/utils";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -15,8 +17,6 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-const MODES: CompareMode[] = ["compare", "render", "plan"];
-
 const slugify = (value: string) =>
     value
         .toLowerCase()
@@ -25,10 +25,10 @@ const slugify = (value: string) =>
 
 export default function Home() {
     const { projects, isSignedIn } = useOutletContext<AppContext>();
-    const [mode, setMode] = useState<CompareMode>("compare");
+    // 0 is all render, 100 is all sketch. The stage tabs pin it to either edge.
     const [position, setPosition] = useState(50);
 
-    // Show the newest finished render in the hero; fall back to bare surfaces.
+    // Show the newest finished render in the showcase; fall back to the sample plan.
     const featured = useMemo(
         () => projects.find((project) => project.renderedImage && project.sourceImage),
         [projects],
@@ -36,11 +36,21 @@ export default function Home() {
 
     const path = featured
         ? `${slugify(featured.name ?? `residence-${featured.id}`)} / top-down`
-        : "no renders yet";
+        : "sample / level-1";
+
+    const stage = position >= 50 ? "sketch" : "render";
 
     return (
         <div className="overview">
             <section className="hero">
+                <div className="hero-backdrop" aria-hidden="true">
+                    <div className="plane" />
+                    <div className="plane plane--fine" />
+                    <div className="glow" />
+                    <div className="sweep" />
+                    <div className="vignette" />
+                </div>
+
                 <div className="announce">
                     <span className="dot" />
                     {isSignedIn && projects.length > 0
@@ -59,6 +69,14 @@ export default function Home() {
                     <Link to="/new" className="btn btn--primary btn--lg">Render a plan</Link>
                     <Link to="/renders" className="btn btn--secondary btn--lg">Browse renders</Link>
                 </div>
+            </section>
+
+            <section className="stages">
+                <div className="eyebrow">SKETCH &rarr; RENDER</div>
+                <h2>One plan, two stages</h2>
+                <p className="lede">
+                    Start from the line drawing and colour it into a render. Drag to move between them.
+                </p>
 
                 <div className="showcase">
                     <div className="showcase-head">
@@ -68,28 +86,57 @@ export default function Home() {
                             <span />
                         </div>
                         <span className="path">{path}</span>
+
+                        <div className="stage-toggle">
+                            <button
+                                type="button"
+                                className={stage === "sketch" ? "is-active" : ""}
+                                onClick={() => setPosition(100)}
+                            >
+                                01 SKETCH
+                            </button>
+                            <button
+                                type="button"
+                                className={stage === "render" ? "is-active" : ""}
+                                onClick={() => setPosition(0)}
+                            >
+                                02 RENDER
+                            </button>
+                        </div>
                     </div>
 
                     <CompareStage
                         planImage={featured?.sourceImage}
                         renderImage={featured?.renderedImage}
-                        mode={mode}
                         position={position}
                         onPositionChange={setPosition}
-                    >
-                        <div className="glass-bar absolute bottom-4 left-1/2 -translate-x-1/2">
-                            {MODES.map((value) => (
-                                <button
-                                    key={value}
-                                    type="button"
-                                    className={`seg ${mode === value ? "is-active" : ""}`}
-                                    onClick={() => setMode(value)}
-                                >
-                                    {value[0].toUpperCase() + value.slice(1)}
-                                </button>
-                            ))}
+                        beforeLabel="01 SKETCH"
+                        afterLabel="02 RENDER"
+                        planFallback={<SamplePlan variant="sketch" />}
+                        renderFallback={<SamplePlan variant="render" />}
+                    />
+
+                    <div className="showcase-foot">
+                        <p className="caption">
+                            Drag the handle: the line drawing on the left, the coloured render on the right.
+                        </p>
+
+                        <div className="stats">
+                            {featured ? (
+                                <>
+                                    <span>top-down</span>
+                                    <span>{featured.furnish === false ? "unfurnished" : "furnished"}</span>
+                                    <span>{formatRelativeTime(featured.timestamp)}</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span>128 m&#178;</span>
+                                    <span>4 rooms</span>
+                                    <span>sample plan</span>
+                                </>
+                            )}
                         </div>
-                    </CompareStage>
+                    </div>
                 </div>
             </section>
 

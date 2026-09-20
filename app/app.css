@@ -27,6 +27,51 @@
     --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+@keyframes planDrift {
+    from {
+        transform: translate3d(0, 0, 0);
+    }
+    to {
+        transform: translate3d(-160px, -160px, 0);
+    }
+}
+
+@keyframes planDriftSlow {
+    from {
+        transform: translate3d(0, 0, 0);
+    }
+    to {
+        transform: translate3d(80px, -80px, 0);
+    }
+}
+
+@keyframes sweep {
+    0% {
+        transform: translateX(-40%);
+        opacity: 0;
+    }
+    15%,
+    85% {
+        opacity: 0.55;
+    }
+    100% {
+        transform: translateX(140%);
+        opacity: 0;
+    }
+}
+
+@keyframes glowPulse {
+    0%,
+    100% {
+        opacity: 0.2;
+        transform: translate(-50%, -50%) scale(1);
+    }
+    50% {
+        opacity: 0.34;
+        transform: translate(-50%, -50%) scale(1.12);
+    }
+}
+
 @layer base {
     html {
         scroll-behavior: smooth;
@@ -287,6 +332,22 @@
         }
     }
 
+    .sample-plan {
+        @apply h-full w-full;
+
+        &.is-sketch {
+            @apply bg-[#0f0f11];
+        }
+
+        &.is-render {
+            @apply bg-[#17171a];
+        }
+
+        svg {
+            @apply h-full w-full;
+        }
+    }
+
     /* ---------------------------------------------------------------- *
      * Overview
      * ---------------------------------------------------------------- */
@@ -295,7 +356,12 @@
         @apply flex flex-1 flex-col;
 
         .hero {
-            @apply flex flex-col items-center px-6 pt-24 pb-18 text-center;
+            @apply relative flex flex-col items-center overflow-hidden border-b border-line px-6 pt-28 pb-26 text-center;
+
+            /* Everything but the backdrop rides above it */
+            > *:not(.hero-backdrop) {
+                @apply relative z-10;
+            }
 
             .announce {
                 @apply mb-6 inline-flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-[5px] text-xs text-muted;
@@ -314,15 +380,80 @@
             }
 
             .actions {
-                @apply mb-15 flex flex-wrap justify-center gap-2.5;
+                @apply flex flex-wrap justify-center gap-2.5;
+            }
+        }
+
+        .hero-backdrop {
+            @apply pointer-events-none absolute inset-0 overflow-hidden;
+
+            /* Two blueprint grids drifting against each other */
+            .plane {
+                @apply absolute -inset-[200px] opacity-50;
+
+                background-image:
+                    linear-gradient(#1f1f23 1px, transparent 1px),
+                    linear-gradient(90deg, #1f1f23 1px, transparent 1px);
+                background-size: 80px 80px;
+                animation: planDrift 26s linear infinite;
+            }
+
+            .plane--fine {
+                @apply opacity-55;
+
+                background-image:
+                    linear-gradient(#18181b 1px, transparent 1px),
+                    linear-gradient(90deg, #18181b 1px, transparent 1px);
+                background-size: 16px 16px;
+                animation: planDriftSlow 38s linear infinite;
+            }
+
+            .glow {
+                @apply absolute top-[46%] left-1/2 h-[560px] w-[900px] -translate-x-1/2 -translate-y-1/2 rounded-full blur-[30px];
+
+                background: radial-gradient(circle, rgb(255 107 53 / 0.22), transparent 66%);
+                animation: glowPulse 9s ease-in-out infinite;
+            }
+
+            .sweep {
+                @apply absolute top-0 bottom-0 w-[220px];
+
+                background: linear-gradient(90deg, transparent, rgb(255 107 53 / 0.09), transparent);
+                animation: sweep 11s ease-in-out infinite;
+            }
+
+            .vignette {
+                @apply absolute inset-0;
+
+                background: radial-gradient(ellipse at 50% 40%, transparent 30%, #0b0b0c 88%);
+            }
+        }
+
+        /* ---------------------------------------------------------------- *
+         * Sketch -> render showcase
+         * ---------------------------------------------------------------- */
+
+        .stages {
+            @apply flex flex-col items-center px-6 pt-18 pb-20 text-center;
+
+            .eyebrow {
+                @apply mb-2.5 font-mono text-[10px] tracking-[0.18em] text-faint;
+            }
+
+            h2 {
+                @apply mb-1.5 text-xl font-semibold;
+            }
+
+            .lede {
+                @apply mb-7 max-w-[460px] text-sm leading-relaxed text-muted;
             }
         }
 
         .showcase {
-            @apply w-full max-w-[1040px] overflow-hidden rounded-[14px] border border-line bg-surface shadow-[0_30px_70px_rgb(0_0_0/0.6)];
+            @apply w-full max-w-[1040px] overflow-hidden rounded-[14px] border border-line bg-surface text-left shadow-[0_30px_70px_rgb(0_0_0/0.6)];
 
             .showcase-head {
-                @apply flex h-[38px] items-center gap-2.5 border-b border-line px-3.5;
+                @apply flex min-h-11 flex-wrap items-center gap-2.5 border-b border-line px-3.5 py-1.5;
 
                 .dots {
                     @apply flex gap-1.5;
@@ -337,8 +468,32 @@
                 }
             }
 
+            .stage-toggle {
+                @apply ml-auto flex shrink-0 gap-[3px] rounded-[9px] border border-line bg-[#0f0f11] p-[3px];
+
+                button {
+                    @apply cursor-pointer rounded-md px-2.5 py-[5px] font-mono text-[10px] tracking-[0.1em] text-dim transition-colors hover:text-foreground;
+
+                    &.is-active {
+                        @apply bg-foreground text-background;
+                    }
+                }
+            }
+
             .stage {
-                @apply h-[clamp(260px,38vw,440px)];
+                @apply h-[clamp(300px,40vw,460px)];
+            }
+
+            .showcase-foot {
+                @apply flex flex-wrap items-center gap-2.5 border-t border-line px-3.5 py-3;
+
+                .caption {
+                    @apply text-xs text-muted;
+                }
+
+                .stats {
+                    @apply ml-auto flex shrink-0 gap-5 font-mono text-[10px] text-faint;
+                }
             }
         }
 
@@ -776,5 +931,13 @@
         p {
             @apply max-w-[420px] text-[13px] text-muted;
         }
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .overview .hero-backdrop .plane,
+    .overview .hero-backdrop .glow,
+    .overview .hero-backdrop .sweep {
+        animation: none;
     }
 }

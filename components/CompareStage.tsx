@@ -13,6 +13,10 @@ interface CompareStageProps {
     zoom?: number;
     /** CSS filter applied to the render layer only. */
     renderFilter?: string;
+    /** Shown in place of a missing plan image — e.g. the sample plan on the overview. */
+    planFallback?: ReactNode;
+    /** Shown in place of a missing render image. */
+    renderFallback?: ReactNode;
     beforeLabel?: string;
     afterLabel?: string;
     labelOffset?: string;
@@ -33,6 +37,8 @@ const CompareStage = ({
     onPositionChange,
     zoom = 100,
     renderFilter,
+    planFallback = <span className="layer-note">PLAN</span>,
+    renderFallback = <span className="layer-note">RENDER</span>,
     beforeLabel = "BEFORE",
     afterLabel = "AFTER",
     labelOffset = "16px",
@@ -75,7 +81,7 @@ const CompareStage = ({
                         {planImage ? (
                             <img src={planImage} alt="Source floor plan" style={scale} draggable={false} />
                         ) : (
-                            <span className="layer-note">PLAN</span>
+                            planFallback
                         )}
                     </div>
                 }
@@ -89,7 +95,7 @@ const CompareStage = ({
                                 draggable={false}
                             />
                         ) : (
-                            <span className="layer-note">RENDER</span>
+                            renderFallback
                         )}
                     </div>
                 }
