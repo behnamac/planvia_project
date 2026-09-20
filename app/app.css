@@ -941,3 +941,61 @@
         animation: none;
     }
 }
+
+/* ------------------------------------------------------------------ *
+ * Landing entrance — pre-hydration state
+ *
+ * `anim-boot` is added by the inline script in app/root.tsx during head
+ * parse and removed by useLandingAnimation() once GSAP owns the inline
+ * styles, so these rules only ever apply in the window between first paint
+ * and hydration. Without JS the class never lands and the page renders as
+ * it always did.
+ *
+ * Unlayered on purpose: unlayered rules beat every Tailwind layer.
+ * Keep this selector list in sync with HIDE_TARGETS in
+ * lib/landing.animation.ts.
+ * ------------------------------------------------------------------ */
+html.anim-boot .overview {
+    .hero-backdrop,
+    .hero .announce,
+    .hero h1,
+    .hero .subtitle,
+    .hero .actions,
+    .stages .eyebrow,
+    .stages h2,
+    .stages .lede,
+    .showcase,
+    .features .feature,
+    .site-footer {
+        opacity: 0;
+    }
+}
+
+/* Reduced motion gets the page exactly as the server sent it, from the very
+   first paint. The JS side mirrors this with a gsap.matchMedia() branch. */
+@media (prefers-reduced-motion: reduce) {
+    html.anim-boot .overview :is(
+        .hero-backdrop,
+        .hero .announce,
+        .hero h1,
+        .hero .subtitle,
+        .hero .actions,
+        .stages .eyebrow,
+        .stages h2,
+        .stages .lede,
+        .showcase,
+        .features .feature,
+        .site-footer
+    ) {
+        opacity: 1;
+    }
+}
+
+/* SplitText's line masks clip at the line box. The hero h1 runs
+   leading-[1.04], so descenders ("Judge", "light") would be shaved off
+   mid-reveal. Grow the clip box downward without changing layout. */
+.overview .hero .hero-line-mask,
+.overview .hero .sub-line-mask {
+    padding-bottom: 0.14em;
+    margin-bottom: -0.14em;
+}

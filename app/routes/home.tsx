@@ -1,10 +1,11 @@
 import type { Route } from "./+types/home";
-import {useMemo, useState} from "react";
+import {useMemo, useRef, useState} from "react";
 import {Link, useOutletContext} from "react-router";
 import {Columns2, PanelsTopLeft, Sun} from "lucide-react";
 import CompareStage from "../../components/CompareStage";
 import SamplePlan from "../../components/SamplePlan";
 import {formatRelativeTime} from "../../lib/utils";
+import {useLandingAnimation} from "../../lib/landing.animation";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -27,6 +28,9 @@ export default function Home() {
     const { projects, isSignedIn } = useOutletContext<AppContext>();
     // 0 is all render, 100 is all sketch. The stage tabs pin it to either edge.
     const [position, setPosition] = useState(50);
+    const rootRef = useRef<HTMLDivElement>(null);
+
+    useLandingAnimation(rootRef);
 
     // Show the newest finished render in the showcase; fall back to the sample plan.
     const featured = useMemo(
@@ -41,7 +45,7 @@ export default function Home() {
     const stage = position >= 50 ? "sketch" : "render";
 
     return (
-        <div className="overview">
+        <div className="overview" ref={rootRef}>
             <section className="hero">
                 <div className="hero-backdrop" aria-hidden="true">
                     <div className="plane" />

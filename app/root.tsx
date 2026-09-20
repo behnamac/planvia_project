@@ -33,13 +33,37 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="theme-color" content="#0B0B0C" />
         <Meta />
         <Links />
+        {/*
+          Marks JS-capable clients so app.css can pre-hide the landing entrance
+          targets before hydration. SSR streams the landing fully visible and the
+          browser can paint it before the bundle arrives, so useLayoutEffect is
+          not early enough on its own. useLandingAnimation() writes the hidden
+          state as inline styles and then removes this class, handing ownership
+          to GSAP. Deliberately a script rather than a className on <html>: React
+          must not own the attribute, or it would re-add it on every Layout
+          re-render after the hook removed it, hence suppressHydrationWarning
+          on <html> above: React 19 does flag the extra attribute otherwise.
+
+          The timer is the failsafe for the one case the class cannot survive —
+          JS enabled but the bundle never arriving — which would otherwise leave
+          the landing page blank for good. Not a CSS animation on purpose: those
+          outrank inline styles and would fight GSAP for the rest of the session.
+        */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              `document.documentElement.classList.add("anim-boot");` +
+              `window.__animBoot=setTimeout(function(){` +
+              `document.documentElement.classList.remove("anim-boot")},2500)`,
+          }}
+        />
       </head>
       <body>
         {children}
